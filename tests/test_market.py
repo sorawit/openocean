@@ -1,6 +1,6 @@
 import pytest
 import brownie
-from brownie import a, web3, MockNFT, MockERC20, MarketPlace
+from brownie import a, web3, MockNFT, MockERC20, OpenOcean
 
 
 def order_hash(market, order):
@@ -35,7 +35,7 @@ def sign(acc, hex):
 
 
 def test_basic_maker_sell():
-    mkt = MarketPlace.deploy({'from': a[0]})
+    mkt = OpenOcean.deploy({'from': a[0]})
     mkt.grantRole(mkt.OPERATOR_ROLE(), a[1], {'from': a[0]})
     nft = MockNFT.deploy({'from': a[0]})
     usd = MockERC20.deploy({'from': a[0]})
@@ -64,7 +64,7 @@ def test_basic_maker_sell():
 
 
 def test_basic_maker_buy():
-    mkt = MarketPlace.deploy({'from': a[0]})
+    mkt = OpenOcean.deploy({'from': a[0]})
     mkt.grantRole(mkt.OPERATOR_ROLE(), a[1], {'from': a[0]})
     nft = MockNFT.deploy({'from': a[0]})
     usd = MockERC20.deploy({'from': a[0]})

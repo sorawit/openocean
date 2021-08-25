@@ -23,7 +23,7 @@ struct Order {
 
 /// @dev Decentralized market place for trading NFTs without fees. Although the contract has
 /// access control, the most the owner can do is stopping trading activity. CANNOT STEAL FUNDS.
-contract MarketPlace is AccessControl, Pausable, ReentrancyGuard {
+contract OpenOcean is AccessControl, Pausable, ReentrancyGuard {
   using SafeERC20 for IERC20;
 
   bytes32 public OPERATOR_ROLE = keccak256('OPERATOR_ROLE');
