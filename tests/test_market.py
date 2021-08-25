@@ -24,7 +24,7 @@ def order_array(order):
         order['isBuy'],
         order['cost'],
         order['unit'],
-        order['expr'],
+        order['expiration'],
         order['salt'],
     ]
 
@@ -46,7 +46,7 @@ def test_basic_maker_sell():
         'isBuy': False,
         'cost': 100 * 10**18,
         'unit': usd.address,
-        'expr': 2000000000,
+        'expiration': 2000000000,
         'salt': 0,
     }
     nft.mint(a[7], 42, {'from': a[0]})
@@ -75,7 +75,7 @@ def test_basic_maker_buy():
         'isBuy': True,
         'cost': 100 * 10**18,
         'unit': usd.address,
-        'expr': 2000000000,
+        'expiration': 2000000000,
         'salt': 0,
     }
     nft.mint(a[7], 42, {'from': a[0]})
@@ -86,8 +86,7 @@ def test_basic_maker_buy():
     assert usd.balanceOf(a[8]) == 1000 * 10**18
     msig = sign(a[8], order_hash(mkt.address, order))
     osig = sign(a[1], operator_hash(mkt.address, order, 3000000000))
-    tx = mkt.trade(order_array(order), msig, 3000000000, osig, {'from': a[7]})
-    print(tx.gas_used)
+    mkt.trade(order_array(order), msig, 3000000000, osig, {'from': a[7]})
     assert nft.ownerOf(42) == a[8]
     assert usd.balanceOf(a[7]) == 100 * 10**18
     assert usd.balanceOf(a[8]) == 900 * 10**18
