@@ -101,7 +101,7 @@ contract MarketPlace is Initializable {
     address seller = ord.isBuy ? msg.sender : ord.maker;
     IERC20(ord.denom).safeTransferFrom(seller, buyer, ord.cost - ord.fee);
     IERC20(ord.denom).safeTransferFrom(seller, cfo, ord.fee);
-    IERC721(ord.nft).safeTransferFrom(buyer, seller, ord.id, bytes(''));
+    IERC721(ord.nft).safeTransferFrom(buyer, seller, ord.id, '');
   }
 
   function cancel(Order memory ord) external lock {
