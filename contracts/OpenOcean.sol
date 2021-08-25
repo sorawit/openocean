@@ -43,9 +43,7 @@ contract OpenOcean is AccessControl, Pausable, ReentrancyGuard, IOpenOcean {
   ) external override whenNotPaused nonReentrant {
     require(deadline > block.timestamp, '!deadline');
     require(ord.expiration > block.timestamp, '!expiration');
-    require(ord.maker != msg.sender && ord.maker != address(this), '!maker');
-    require(ord.nft != msg.sender && ord.nft != address(this) && ord.nft != ord.maker, '!nft');
-    require(ord.unit != msg.sender && ord.unit != address(this) && ord.unit != ord.maker, '!unit');
+    require(ord.maker != msg.sender && ord.maker != beneficiary, '!maker');
     bytes32 hash = getOrderHash(ord);
     require(!gone[hash], '!gone');
     gone[hash] = true;
