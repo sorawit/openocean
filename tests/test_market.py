@@ -1,6 +1,6 @@
 import pytest
 import brownie
-from brownie import a, web3, MockNFT, MockERC20, OpenOcean
+from brownie import a, web3, MockNFT, MockERC20, MockWETH, ETHOcean, OpenOcean
 
 
 def order_hash(market, order):
@@ -57,7 +57,7 @@ def test_basic_maker_sell():
     assert usd.balanceOf(a[8]) == 1000 * 10**18
     msig = sign(a[7], order_hash(mkt.address, order))
     osig = sign(a[1], operator_hash(mkt.address, order, 3000000000))
-    mkt.trade(order_array(order), msig, 3000000000, osig, {'from': a[8]})
+    mkt.trade(order_array(order), msig, 3000000000, osig, a[8], {'from': a[8]})
     assert nft.ownerOf(42) == a[8]
     assert usd.balanceOf(a[7]) == 100 * 10**18
     assert usd.balanceOf(a[8]) == 900 * 10**18
@@ -86,7 +86,34 @@ def test_basic_maker_buy():
     assert usd.balanceOf(a[8]) == 1000 * 10**18
     msig = sign(a[8], order_hash(mkt.address, order))
     osig = sign(a[1], operator_hash(mkt.address, order, 3000000000))
-    mkt.trade(order_array(order), msig, 3000000000, osig, {'from': a[7]})
+    mkt.trade(order_array(order), msig, 3000000000, osig, a[7], {'from': a[7]})
     assert nft.ownerOf(42) == a[8]
     assert usd.balanceOf(a[7]) == 100 * 10**18
     assert usd.balanceOf(a[8]) == 900 * 10**18
+
+
+def test_basic_maker_sell_eth():
+    mkt = OpenOcean.deploy({'from': a[0]})
+    mkt.grantRole(mkt.OPERATOR_ROLE(), a[1], {'from': a[0]})
+    nft = MockNFT.deploy({'from': a[0]})
+    weth = MockWETH.deploy({'from': a[0]})
+    weth.deposit({'from': a[0], 'value': '1 ether'})
+    eoc = ETHOcean.deploy(mkt, weth, {'from': a[0], 'value': 1})
+    order = {
+        'maker': a[7].address,
+        'nft': nft.address,
+        'id': 42,
+        'isBuy': False,
+        'cost': 10 * 10**18,
+        'unit': weth.address,
+        'expiration': 2000000000,
+        'salt': 0,
+    }
+    nft.mint(a[7], 42, {'from': a[0]})
+    nft.setApprovalForAll(mkt, True, {'from': a[7]})
+    assert nft.ownerOf(42) == a[7]
+    msig = sign(a[7], order_hash(mkt.address, order))
+    osig = sign(a[1], operator_hash(mkt.address, order, 3000000000))
+    eoc.buyWithETH(order_array(order), msig, 3000000000, osig, {'from': a[8], 'value': order['cost']})
+    assert nft.ownerOf(42) == a[8]
+    assert weth.balanceOf(a[7]) == 10 * 10**18

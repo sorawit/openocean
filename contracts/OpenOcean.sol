@@ -9,21 +9,11 @@ import 'OpenZeppelin/openzeppelin-contracts@4.3.0/contracts/security/Pausable.so
 import 'OpenZeppelin/openzeppelin-contracts@4.3.0/contracts/security/ReentrancyGuard.sol';
 import 'OpenZeppelin/openzeppelin-contracts@4.3.0/contracts/utils/cryptography/ECDSA.sol';
 import 'OpenZeppelin/openzeppelin-contracts@4.3.0/contracts/utils/cryptography/SignatureChecker.sol';
-
-struct Order {
-  address maker; // The order's maker
-  address nft; // The NFT contract address to be traded
-  uint id; // The NFT id to be traded
-  bool isBuy; // Whether the maker wants to buy or sell the NFT
-  uint cost; // How many unit tokens does it cost to perform trade
-  address unit; // The ERC20 contract address for cost unit
-  uint64 expiration; // Expiration timestamp in UNIX epoch
-  uint64 salt; // Unique salt
-}
+import '../interfaces/IOpenOcean.sol';
 
 /// @dev Decentralized market place for trading NFTs without fees. Although the contract has
 /// access control, the most the owner can do is stopping trading activity. CANNOT STEAL FUNDS.
-contract OpenOcean is AccessControl, Pausable, ReentrancyGuard {
+contract OpenOcean is AccessControl, Pausable, ReentrancyGuard, IOpenOcean {
   using SafeERC20 for IERC20;
 
   bytes32 public OPERATOR_ROLE = keccak256('OPERATOR_ROLE');
@@ -48,8 +38,9 @@ contract OpenOcean is AccessControl, Pausable, ReentrancyGuard {
     Order memory ord,
     bytes memory msig,
     uint64 deadline,
-    bytes memory osig
-  ) external whenNotPaused nonReentrant {
+    bytes memory osig,
+    address beneficiary
+  ) external override whenNotPaused nonReentrant {
     require(deadline > block.timestamp, '!deadline');
     require(ord.expiration > block.timestamp, '!expiration');
     require(ord.maker != msg.sender && ord.maker != address(this), '!maker');
@@ -62,10 +53,13 @@ contract OpenOcean is AccessControl, Pausable, ReentrancyGuard {
     require(SignatureChecker.isValidSignatureNow(ord.maker, msign, msig), '!msig');
     bytes32 osign = ECDSA.toEthSignedMessageHash(keccak256(abi.encodePacked(hash, deadline)));
     require(hasRole(OPERATOR_ROLE, ECDSA.recover(osign, osig)), '!osig');
-    address buyer = ord.isBuy ? ord.maker : msg.sender;
-    address seller = ord.isBuy ? msg.sender : ord.maker;
-    IERC20(ord.unit).safeTransferFrom(buyer, seller, ord.cost);
-    IERC721(ord.nft).safeTransferFrom(seller, buyer, ord.id, '');
+    if (ord.isBuy) {
+      IERC20(ord.unit).safeTransferFrom(ord.maker, beneficiary, ord.cost);
+      IERC721(ord.nft).safeTransferFrom(msg.sender, ord.maker, ord.id, '');
+    } else {
+      IERC20(ord.unit).safeTransferFrom(msg.sender, ord.maker, ord.cost);
+      IERC721(ord.nft).safeTransferFrom(ord.maker, beneficiary, ord.id, '');
+    }
   }
 
   /// @dev Cancel a specific order, marking it gone to disallow anyone to trade against it.
