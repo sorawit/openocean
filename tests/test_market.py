@@ -2,36 +2,64 @@ import pytest
 import brownie
 from brownie import a, web3, MockNFT, MockERC20, MockWETH, ETHOcean, OpenOcean
 
+domain_type = [
+    {'name': 'name', 'type': 'string'},
+    {'name': 'version', 'type': 'string'},
+    {'name': 'chainId', 'type': 'uint256'},
+    {'name': 'verifyingContract', 'type': 'address'},
+]
 
-def order_hash(market, order):
-    return web3.solidityKeccak(
-        [
-            'uint256', 'address', 'address', 'address', 'uint256', 'bool', 'uint256', 'address', 'uint64', 'uint64'
-        ],
-        [1, market] + order_array(order),
-    ).hex()
+order_type = [
+    {'name': 'maker', 'type': 'address'},
+    {'name': 'nft', 'type': 'address'},
+    {'name': 'id', 'type': 'uint256'},
+    {'name': 'isBuy', 'type': 'bool'},
+    {'name': 'cost', 'type': 'uint256'},
+    {'name': 'unit', 'type': 'address'},
+    {'name': 'expiration', 'type': 'uint64'},
+    {'name': 'salt', 'type': 'uint64'},
+]
 
-
-def operator_hash(market, order, deadline):
-    return web3.solidityKeccak(['bytes32', 'uint64'], [order_hash(market, order), deadline]).hex()
+operator_type = [
+    {'name': 'mhash', 'type': 'bytes32'},
+    {'name': 'deadline', 'type': 'uint64'},
+]
 
 
 def order_array(order):
-    return [
-        order['maker'],
-        order['nft'],
-        order['id'],
-        order['isBuy'],
-        order['cost'],
-        order['unit'],
-        order['expiration'],
-        order['salt'],
-    ]
+    return [order.get(e['name']) for e in order_type]
 
 
-def sign(acc, hex):
-    sigx = web3.eth.sign(acc.address, hexstr=hex).hex()
-    return (int.from_bytes(bytes.fromhex(sigx[2:]), 'big') + 27).to_bytes(65, 'big').hex()
+def signTypedData(acc, data):
+    return web3.eth.signTypedData(acc.address, data).hex()
+
+
+def sign_maker(acc, mkt, order):
+    return signTypedData(acc, {
+        'types': {'EIP712Domain': domain_type, 'Order': order_type},
+        'domain': {
+            'name': 'OpenOcean',
+            'version': '1',
+            'chainId': 1,
+            'verifyingContract': mkt.address,
+        },
+        'primaryType': 'Order',
+        'message': order,
+    })
+
+
+def sign_operator(acc, mkt, order, deadline):
+    return signTypedData(acc, {
+        'types': {'EIP712Domain': domain_type, 'Operator': operator_type},
+        'domain': {
+            'name': 'OpenOcean',
+            'version': '1',
+            'chainId': 1,
+            'verifyingContract': mkt.address,
+        },
+        'primaryType': 'Operator',
+        'message': {'mhash': '0x'+mkt.makerSignHash(order_array(order)).hex(), 'deadline': deadline},
+    })
 
 
 def test_basic_maker_sell():
@@ -44,7 +72,7 @@ def test_basic_maker_sell():
         'nft': nft.address,
         'id': 42,
         'isBuy': False,
-        'cost': 100 * 10**18,
+        'cost': str(100 * 10**18),
         'unit': usd.address,
         'expiration': 2000000000,
         'salt': 0,
@@ -55,8 +83,8 @@ def test_basic_maker_sell():
     usd.approve(mkt, 2**256 - 1, {'from': a[8]})
     assert nft.ownerOf(42) == a[7]
     assert usd.balanceOf(a[8]) == 1000 * 10**18
-    msig = sign(a[7], order_hash(mkt.address, order))
-    osig = sign(a[1], operator_hash(mkt.address, order, 3000000000))
+    msig = sign_maker(a[7], mkt, order)
+    osig = sign_operator(a[1], mkt, order, 3000000000)
     mkt.trade(order_array(order), msig, 3000000000, osig, a[8], {'from': a[8]})
     assert nft.ownerOf(42) == a[8]
     assert usd.balanceOf(a[7]) == 100 * 10**18
@@ -73,7 +101,7 @@ def test_basic_maker_buy():
         'nft': nft.address,
         'id': 42,
         'isBuy': True,
-        'cost': 100 * 10**18,
+        'cost': str(100 * 10**18),
         'unit': usd.address,
         'expiration': 2000000000,
         'salt': 0,
@@ -84,8 +112,8 @@ def test_basic_maker_buy():
     usd.approve(mkt, 2**256 - 1, {'from': a[8]})
     assert nft.ownerOf(42) == a[7]
     assert usd.balanceOf(a[8]) == 1000 * 10**18
-    msig = sign(a[8], order_hash(mkt.address, order))
-    osig = sign(a[1], operator_hash(mkt.address, order, 3000000000))
+    msig = sign_maker(a[8], mkt, order)
+    osig = sign_operator(a[1], mkt, order, 3000000000)
     mkt.trade(order_array(order), msig, 3000000000, osig, a[7], {'from': a[7]})
     assert nft.ownerOf(42) == a[8]
     assert usd.balanceOf(a[7]) == 100 * 10**18
@@ -104,7 +132,7 @@ def test_basic_maker_sell_eth():
         'nft': nft.address,
         'id': 42,
         'isBuy': False,
-        'cost': 10 * 10**18,
+        'cost': str(10 * 10**18),
         'unit': weth.address,
         'expiration': 2000000000,
         'salt': 0,
@@ -112,8 +140,8 @@ def test_basic_maker_sell_eth():
     nft.mint(a[7], 42, {'from': a[0]})
     nft.setApprovalForAll(mkt, True, {'from': a[7]})
     assert nft.ownerOf(42) == a[7]
-    msig = sign(a[7], order_hash(mkt.address, order))
-    osig = sign(a[1], operator_hash(mkt.address, order, 3000000000))
+    msig = sign_maker(a[7], mkt, order)
+    osig = sign_operator(a[1], mkt, order, 3000000000)
     eoc.buyWithETH(order_array(order), msig, 3000000000, osig, {'from': a[8], 'value': order['cost']})
     assert nft.ownerOf(42) == a[8]
     assert weth.balanceOf(a[7]) == 10 * 10**18
